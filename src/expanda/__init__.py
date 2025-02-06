@@ -3,6 +3,8 @@ import os
 import math
 import shutil
 import argparse
+import requests
+from bs4 import BeautifulSoup
 from configparser import ConfigParser
 from .extension import Extension
 from .shuffling import shuffle
@@ -82,42 +84,44 @@ def _balancing_corpora(input_files: List[str], corpus_names: List[str],
         os.rename(repeat_filename, input_file)
 
 
-def _build_corpus(config_file: str):
-    # Read config file.
+def _build_corpus(workspace: str, config_file: str):
+    # Read config file
     config = ConfigParser()
-    config.read(config_file)
+    config.read(os.path.join(workspace, config_file))
 
-    # Read arguments from configuration file.
+    # Read arguments from configuration file
     input_files = config['build'].get('input-files')
     input_files = [re.match(r'--(.*?)\s+(.*)', line.strip()).groups()
                    for line in input_files.splitlines(False)
                    if line]
     reuse_vocab = config['build'].get('input-vocab', None)
 
-    temporary = config['build'].get('temporary-path', './tmp')
-    vocab = config['build'].get('output-vocab', 'build/vocab.txt')
+    temporary = os.path.join(workspace, config['build'].get('temporary-path', 'tmp'))
+    vocab = os.path.join(workspace, config['build'].get('output-vocab', 'build/vocab.txt'))
     split_ratio = config['build'].getfloat('split-ratio', 0.1)
 
-    train_corpus = config['build'].get('output-train-corpus',
-                                       'build/corpus.train.txt')
-    test_corpus = config['build'].get('output-test-corpus',
-                                      'build/corpus.test.txt')
-    raw_corpus = config['build'].get('output-raw-corpus',
-                                     'build/corpus.raw.txt')
+    train_corpus = os.path.join(
+        workspace,
+        config['build'].get('output-train-corpus', 'build/corpus.train.txt')
+    )
+    test_corpus = os.path.join(
+        workspace,
+        config['build'].get('output-test-corpus', 'build/corpus.test.txt')
+    )
+    raw_corpus = os.path.join(
+        workspace,
+        config['build'].get('output-raw-corpus', 'build/corpus.raw.txt')
+    )
 
-    subset_size = config['tokenization'].getint('subset-size',
-                                                fallback=1000000000)
+    subset_size = config['tokenization'].getint('subset-size', fallback=1000000000)
     vocab_size = config['tokenization'].getint('vocab-size', fallback=8000)
-    limit_alphabet = config['tokenization'].getint('limit-alphabet',
-                                                   fallback=1000)
+    limit_alphabet = config['tokenization'].getint('limit-alphabet', fallback=1000)
     unk_token = config['tokenization'].get('unk-token', '<unk>')
 
     control_tokens = config['tokenization'].get('control-tokens', '')
-    control_tokens = [token.strip()
-                      for token in control_tokens.splitlines()
-                      if token]
+    control_tokens = [token.strip() for token in control_tokens.splitlines() if token]
 
-    # Create directories if not exists.
+    # Create directories if not exists
     def create_dir(path):
         try:
             os.makedirs(path)
@@ -130,22 +134,19 @@ def _build_corpus(config_file: str):
     create_dir(os.path.dirname(raw_corpus))
     create_dir(temporary)
 
-    # Extract raw corpus file to plain sentences.
+    # Extract raw corpus file to plain sentences
     extract_filenames = random_filenames(temporary, len(input_files))
     for (ext, input_file), name in zip(input_files, extract_filenames):
         print(f'[*] execute extension [{ext}] for [{input_file}]')
-        Extension(ext).call(input_file,
-                            name,
-                            temporary,
-                            dict(config.items(ext)))
+        Extension(ext).call(
+            os.path.join(workspace, input_file), 
+            name, temporary, dict(config.items(ext)))
 
-    # Balance the size of each corpus.
+    # Balance the size of each corpus
     if config['build'].get('balancing', '').lower() == 'true':
-        _balancing_corpora(extract_filenames,
-                           [name for _, name in input_files],
-                           temporary)
+        _balancing_corpora(extract_filenames, [name for _, name in input_files], temporary)
 
-    # Gather the extracted plain text.
+    # Gather the extracted plain text
     print('[*] merge extracted texts.')
     integrate_filename = random_filename(temporary)
     with open(integrate_filename, 'wb') as dst:
@@ -154,26 +155,25 @@ def _build_corpus(config_file: str):
                 shutil.copyfileobj(src, dst)
             os.remove(name)
 
-    # Shuffle the text.
+    # Shuffle the text
     print('[*] start shuffling merged corpus...')
     shuffle(integrate_filename, raw_corpus, temporary)
     os.remove(integrate_filename)
 
-    # Train subword tokenizer and tokenize the corpus.
+    # Train subword tokenizer and tokenize the corpus
     print('[*] complete preparing corpus. start training tokenizer...')
 
     if reuse_vocab is None:
         train_tokenizer(raw_corpus, vocab, temporary, subset_size, vocab_size,
                         limit_alphabet, unk_token, control_tokens)
     else:
-        # If re-using pretrained vocabulary file, skip training tokenizer.
+        # If re-using pretrained vocabulary file, skip training tokenizer
         print(f'[*] use the given vocabulary file [{reuse_vocab}].')
         shutil.copyfile(reuse_vocab, vocab)
 
     print('[*] create tokenized corpus.')
     tokenize_filename = random_filename(temporary)
-    tokenize_corpus(raw_corpus, tokenize_filename, vocab, unk_token,
-                    control_tokens)
+    tokenize_corpus(raw_corpus, tokenize_filename, vocab, unk_token, control_tokens)
 
     print('[*] split the corpus into train and test dataset.')
     with open(tokenize_filename, 'rb') as src:
@@ -183,23 +183,82 @@ def _build_corpus(config_file: str):
 
         src.seek(0)
 
-        # Write to test dataset.
+        # Write to test dataset
         with open(test_corpus, 'wb') as dst:
             for i, line in enumerate(src):
                 dst.write(line)
                 if i >= total_lines * split_ratio:
                     break
 
-        # Write to train dataset.
+        # Write to train dataset
         with open(train_corpus, 'wb') as dst:
             shutil.copyfileobj(src, dst)
     os.remove(tokenize_filename)
 
-    # Remove temporary directory.
+    # Remove temporary directory
     print('[*] remove temporary directory.')
     shutil.rmtree(temporary)
 
     print('[*] finish building corpus.')
+
+
+def _download_latest_wikipedia_dumps(workspace: str, limit: int):
+    # Get the latest Wikipedia dump URL
+    response = requests.get('https://dumps.wikimedia.org/enwiki/latest/', timeout=60)
+    soup = BeautifulSoup(response.content, 'html.parser')
+    links = soup.find_all('a', href=True)
+    dump_files = [
+        link['href'] for link in links
+        if link['href'].endswith('-pages-articles.xml.bz2') and 
+        'multistream' not in link['href'] and 
+        'meta' not in link['href']
+    ]
+
+    # Limit the number of files to download
+    dump_files = dump_files[:limit]
+
+    # Create src directory if not exists
+    src_dir = os.path.join(workspace, 'src')
+    os.makedirs(src_dir, exist_ok=True)
+
+    # Download the dump files with resume capability
+    for dump_file in dump_files:
+        dump_url = f'https://dumps.wikimedia.org/enwiki/latest/{dump_file}'
+        dump_path = os.path.join(src_dir, dump_file)
+        print(f'Downloading {dump_url} to {dump_path}')
+
+        # Check if file already exists and get its size
+        file_size = 0
+        if os.path.exists(dump_path):
+            file_size = os.path.getsize(dump_path)
+
+        headers = {"Range": f"bytes={file_size}-"}
+        with requests.get(dump_url, headers=headers, stream=True, timeout=(180, 180)) as r:
+            r.raise_for_status()
+            with open(dump_path, 'ab') as f:
+                for chunk in r.iter_content(chunk_size=8192):  # 8 KB chunks
+                    if chunk:
+                        f.write(chunk)
+
+    # Generate expanda.cfg file
+    config = ConfigParser()
+    config['expanda.ext.wikipedia'] = {
+        'num-cores': f'{os.cpu_count() or 1}'
+    }
+    config['tokenization'] = {
+        'unk-token': '<unk>',
+        'control-tokens': '<s>\n</s>\n<pad>'
+    }
+    config['build'] = {
+        'input-files': '\n'.join([
+            f'--expanda.ext.wikipedia     src/{dump_file}' for dump_file in dump_files
+        ])
+    }
+
+    with open(os.path.join(workspace, 'expanda.cfg'), 'w') as configfile:
+        config.write(configfile)
+
+    print(f'Generated expanda.cfg in {workspace}')
 
 
 def _main():
@@ -221,12 +280,22 @@ def _main():
     show_parser.add_argument(
         'extension', help='module name of certain extension')
 
-    # command line: expanda build [config]
+    # command line: expanda build [workspace] [config]
     build_parser = subparsers.add_parser(
         'build', help='build dataset through given corpora')
     build_parser.add_argument(
+        'workspace', help='workspace directory')
+    build_parser.add_argument(
         'config', default='expanda.cfg', nargs='?',
         help='expanda configuration file')
+
+    # command line: expanda download [workspace] [--limit LIMIT]
+    download_parser = subparsers.add_parser(
+        'download', help='download latest Wikipedia dumps and generate expanda.cfg')
+    download_parser.add_argument(
+        'workspace', help='workspace directory')
+    download_parser.add_argument(
+        '--limit', type=int, default=5, help='limit the number of files to download')
 
     args = parser.parse_args()
     if args.command == 'list':
@@ -234,4 +303,6 @@ def _main():
     elif args.command == 'show':
         _show_extension_details(args.extension)
     elif args.command == 'build':
-        _build_corpus(args.config)
+        _build_corpus(args.workspace, args.config)
+    elif args.command == 'download':
+        _download_latest_wikipedia_dumps(args.workspace, args.limit)

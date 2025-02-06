@@ -80,7 +80,7 @@ def train_tokenizer(
                                limit_alphabet=limit_alphabet,
                                special_tokens=[unk_token] + control_tokens,
                                continuing_subword_prefix='##')
-    tokenizer.train(trainer, [subset_file])
+    tokenizer.train([subset_file], trainer=trainer)
 
     # Save trained subword vocabulary in `temporary` directory and rename to
     # `vocab_file`.
