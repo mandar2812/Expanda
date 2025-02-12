@@ -3,7 +3,7 @@ import re
 import bz2
 import shutil
 import mwparserfromhell as mw
-import xml.etree.cElementTree as etree
+import xml.etree.ElementTree as etree
 from typing import List, Dict, Any
 from multiprocessing import Process, Queue
 from expanda.utils import random_filenames
