@@ -9,6 +9,7 @@ def test_training_tokenizer_well():
     # Use temporary directory since `tokenizers` does not support mocking.
     input_file = random_filename(tempfile.gettempdir())
     vocab_file = random_filename(tempfile.gettempdir())
+    merges_file = random_filename(tempfile.gettempdir())
 
     # Copy dummy corpus file to `input_file`.
     shutil.copyfile('tests/res/wikipedia.plain.txt', input_file)
@@ -16,6 +17,7 @@ def test_training_tokenizer_well():
     # Train tokenizer with dummy corpus file.
     train_tokenizer(input_file,
                     vocab_file,
+                    merges_file,
                     tempfile.gettempdir(),
                     vocab_size=100)
 
@@ -32,6 +34,7 @@ def test_tokenizing_corpus_well():
     # Use temporary directory since `tokenizers` does not support mocking.
     input_file = random_filename(tempfile.gettempdir())
     vocab_file = random_filename(tempfile.gettempdir())
+    merges_file = random_filename(tempfile.gettempdir())
     output_file = random_filename(tempfile.gettempdir())
 
     # Copy dummy corpus file to `input_file`.
@@ -40,11 +43,12 @@ def test_tokenizing_corpus_well():
     # First of all, train the tokenizer to tokenize corpus.
     train_tokenizer(input_file,
                     vocab_file,
+                    merges_file,
                     tempfile.gettempdir(),
                     vocab_size=100)
 
     # Next, tokenize the given corpus by using trained tokenizer.
-    tokenize_corpus(input_file, output_file, vocab_file)
+    tokenize_corpus(input_file, output_file, vocab_file, merges_file)
 
     # Check the corpus is tokenized well.
     with open(output_file, 'r') as output, \

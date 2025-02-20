@@ -97,7 +97,8 @@ def _build_corpus(workspace: str, config_file: str):
     reuse_vocab = config['build'].get('input-vocab', None)
 
     temporary = os.path.join(workspace, config['build'].get('temporary-path', 'tmp'))
-    vocab = os.path.join(workspace, config['build'].get('output-vocab', 'build/vocab.txt'))
+    vocab = os.path.join(workspace, config['build'].get('output-vocab', 'build/vocab.json'))
+    merges = os.path.join(workspace, config['build'].get('output-merges', 'build/merges.txt'))
     split_ratio = config['build'].getfloat('split-ratio', 0.1)
 
     train_corpus = os.path.join(
@@ -139,7 +140,7 @@ def _build_corpus(workspace: str, config_file: str):
     for (ext, input_file), name in zip(input_files, extract_filenames):
         print(f'[*] execute extension [{ext}] for [{input_file}]')
         Extension(ext).call(
-            os.path.join(workspace, input_file), 
+            os.path.join(workspace, input_file),
             name, temporary, dict(config.items(ext)))
 
     # Balance the size of each corpus
@@ -164,7 +165,7 @@ def _build_corpus(workspace: str, config_file: str):
     print('[*] complete preparing corpus. start training tokenizer...')
 
     if reuse_vocab is None:
-        train_tokenizer(raw_corpus, vocab, temporary, subset_size, vocab_size,
+        train_tokenizer(raw_corpus, vocab, merges, temporary, subset_size, vocab_size,
                         limit_alphabet, unk_token, control_tokens)
     else:
         # If re-using pretrained vocabulary file, skip training tokenizer
@@ -173,7 +174,9 @@ def _build_corpus(workspace: str, config_file: str):
 
     print('[*] create tokenized corpus.')
     tokenize_filename = random_filename(temporary)
-    tokenize_corpus(raw_corpus, tokenize_filename, vocab, unk_token, control_tokens)
+    tokenize_corpus(
+        raw_corpus, tokenize_filename, vocab, merges,
+        unk_token=unk_token, control_tokens=control_tokens)
 
     print('[*] split the corpus into train and test dataset.')
     with open(tokenize_filename, 'rb') as src:
