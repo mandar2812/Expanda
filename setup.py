@@ -27,6 +27,8 @@ setup(
         'tokenizers',
         'datasets',
         'kss',
+        'huggingface_hub',
+        'python-dotenv'
     ],
 
     entry_points={
