@@ -6,13 +6,14 @@ import mwparserfromhell as mw
 import xml.etree.ElementTree as etree
 from typing import List, Dict, Any
 from multiprocessing import Process, Queue
+from tqdm import tqdm
 from expanda.utils import random_filenames
 
 
 def _modified_removing_unnecessary_spaces(text: str) -> str:
-    replaced = text.replace('\n', ' ').replace('\t', ' ')
-    while '  ' in replaced:
-        replaced = replaced.replace('  ', ' ')
+    replaced = text.replace("\n", " ").replace("\t", " ")
+    while "  " in replaced:
+        replaced = replaced.replace("  ", " ")
     return replaced
 
 
@@ -20,8 +21,7 @@ def _clean_wiki_text(code: str, ns: List[str] = []) -> str:
     # Parse wiki code by using `mwparserfromhell` and create namespace-based
     # wiki-link pattern.the
     wiki = mw.parse(code)
-    regex_mw_nslinks = re.compile('^(?:{}):'.format('|'.join(ns)),
-                                  re.IGNORECASE)
+    regex_mw_nslinks = re.compile("^(?:{}):".format("|".join(ns)), re.IGNORECASE)
 
     # Simple remove wrapper function.0
     def remove_element(section, obj):
@@ -35,22 +35,24 @@ def _clean_wiki_text(code: str, ns: List[str] = []) -> str:
         return bool(regex_mw_nslinks.match(str(obj.title)))
 
     def filter_templates(obj):
-        return obj.name.lower() in {'reflist', 'notelist',
-                                    'notelist-ua', 'notelist-lr',
-                                    'notelist-ur', 'notelist-lg'}
+        return obj.name.lower() in {
+            "reflist",
+            "notelist",
+            "notelist-ua",
+            "notelist-lr",
+            "notelist-ur",
+            "notelist-lg",
+        }
 
     def filter_tags(obj):
-        return str(obj.tag) in {'ref', 'table'}
+        return str(obj.tag) in {"ref", "table"}
 
     section_text = []
-    for section in wiki.get_sections(flat=True,
-                                     include_lead=True):
+    for section in wiki.get_sections(flat=True, include_lead=True):
         # Remove elements filtered by above functions.
-        for obj in section.ifilter_wikilinks(matches=filter_wikilinks,
-                                             recursive=True):
+        for obj in section.ifilter_wikilinks(matches=filter_wikilinks, recursive=True):
             remove_element(section, obj)
-        for obj in section.ifilter_templates(matches=filter_templates,
-                                             recursive=True):
+        for obj in section.ifilter_templates(matches=filter_templates, recursive=True):
             remove_element(section, obj)
         for obj in section.ifilter_tags(matches=filter_tags, recursive=True):
             remove_element(section, obj)
@@ -60,77 +62,88 @@ def _clean_wiki_text(code: str, ns: List[str] = []) -> str:
 
     # Post-process cleaned wiki article content through simple sentence
     # testing.
-    regex_brackets = re.compile(r'\([^(]*?\)')
-    regex_double_quotes = re.compile('[\u201c\u201d]')
-    regex_single_quotes = re.compile('[\x60\xb4\u2018\u2019]')
+    regex_brackets = re.compile(r"\([^(]*?\)")
+    regex_double_quotes = re.compile("[\u201c\u201d]")
+    regex_single_quotes = re.compile("[\x60\xb4\u2018\u2019]")
 
     filtered = []
     for text in section_text:
         for line in text.strip().splitlines():
             # Check if text has normal punctuation.
-            if not line or line[-1] not in '!?.':
+            if not line or line[-1] not in "!?.":
                 continue
 
             # Remove nested brackets and unnecessary spaces.
             while regex_brackets.search(line):
-                line = regex_brackets.sub('', line)
+                line = regex_brackets.sub("", line)
             line = _modified_removing_unnecessary_spaces(line)
 
             # Replace unusual quotes.
             line = regex_double_quotes.sub('"', line)
-            line = regex_single_quotes.sub('\'', line)
+            line = regex_single_quotes.sub("'", line)
 
             # Add post-processed text.
             filtered.append(line)
 
-    return '\n'.join(filtered)
+    return "\n".join(filtered)
 
 
-def _process_article_worker(output_file: str, ns: List[str], queue: Queue):
-    with open(output_file, 'w', encoding='utf-8') as fp:
+def _process_article_worker(
+    output_file: str, ns: List[str], queue: Queue
+):
+    with open(output_file, "w", encoding="utf-8") as fp:
         while True:
             code = queue.get()
             if code is None:
                 break
 
             # Write cleaned wiki articles into the output file.
-            fp.write(_clean_wiki_text(code, ns) + '\n\n')
+            fp.write(_clean_wiki_text(code, ns) + "\n\n")
 
 
 def _prepare_tokenizing_sentences(lang: str):
-    if lang == 'en':
+    if lang == "en":
         import nltk
 
         # Download `punkt` resource.
         try:
-            nltk.data.find('tokenizers/punkt')
+            nltk.data.find("tokenizers/punkt")
         except LookupError:
-            nltk.download('punkt')
+            nltk.download("punkt")
 
 
-def _tokenize_sentences_worker(input_file: str, output_file: str,
-                               lang: str, min_len: int, max_len: int,
-                               split_sent: bool = True):
-    if lang == 'en':
+def _tokenize_sentences_worker(
+    input_file: str,
+    output_file: str,
+    lang: str,
+    min_len: int,
+    max_len: int,
+    prog_queue: Queue,
+    split_sent: bool = True,
+):
+    if lang == "en":
         import nltk
-        nltk.data.find('tokenizers/punkt')
+
+        nltk.data.find("tokenizers/punkt")
 
         tokenize_sentence = nltk.tokenize.sent_tokenize
-    elif lang == 'ko':
+    elif lang == "ko":
         import kss
+
         tokenize_sentence = kss.split_sentences
     else:
-        raise NotImplementedError(f'language [{lang}] is not supported.')
+        raise NotImplementedError(f"language [{lang}] is not supported.")
 
-    with open(input_file, 'r', encoding='utf-8') as src, \
-            open(output_file, 'w', encoding='utf-8') as dst:
-        total_lines = ''
+    with open(input_file, "r", encoding="utf-8") as src, open(
+        output_file, "w", encoding="utf-8"
+    ) as dst:
+        total_lines = ""
         for line in src:
             if not line.strip():
                 # Write the rest sentences.
                 if not split_sent and len(total_lines.strip()) > min_len:
-                    dst.write(total_lines.strip() + '\n')
-                total_lines = ''
+                    dst.write(total_lines.strip() + "\n")
+                total_lines = ""
                 continue
 
             for s in tokenize_sentence(line):
@@ -138,111 +151,136 @@ def _tokenize_sentences_worker(input_file: str, output_file: str,
 
                 if split_sent:
                     if len(s) > min_len and len(s) < max_len:
-                        dst.write(s + '\n')
+                        dst.write(s + "\n")
                 else:
                     if len(total_lines) + len(s) > max_len:
-                        dst.write(total_lines.strip() + '\n')
-                        total_lines = ''
-                    total_lines += s + ' '
+                        dst.write(total_lines.strip() + "\n")
+                        total_lines = ""
+                    total_lines += s + " "
+    prog_queue.put(1)
 
-
-def _extract_wiki_corpus(input_file: str, output_file: str, temporary: str,
-                         args: Dict[str, Any]):
+def _extract_wiki_corpus(
+    input_file: str, output_file: str, temporary: str, args: Dict[str, Any]
+):
     # Open wikipedia dump file.
-    file = bz2.open(input_file, 'r')
-    context = etree.iterparse(file, events=('start', 'end'))
+    file = bz2.open(input_file, "r")
+    context = etree.iterparse(file, events=("start", "end"))
 
     # Get language code.
     _, root = next(context)
     for name, value in root.items():
-        if name.endswith('lang'):
+        if name.endswith("lang"):
             lang = value
             break
 
     # Collect namespaces.
     ns = []
     for event, elem in context:
-        if event != 'end':
+        if event != "end":
             continue
 
-        if elem.tag.endswith('namespace'):
+        if elem.tag.endswith("namespace"):
             if elem.text is not None:
                 ns.append(elem.text)
 
         # Exit the loop if it is finished to read `<namespaces>` tag.
-        if elem.tag.endswith('namespaces'):
+        if elem.tag.endswith("namespaces"):
             break
 
     # Start extracting processes.
+    print(f"[*] loading articles from {input_file}")
     workers = []
-    queue = Queue(maxsize=50 * args['num-cores'])
-    extract_filenames = random_filenames(temporary, args['num-cores'])
+    queue = Queue(maxsize=50 * args["num-cores"])
+    extract_filenames = random_filenames(temporary, args["num-cores"])
 
-    for i in range(args['num-cores']):
-        w = Process(target=_process_article_worker,
-                    args=(extract_filenames[i], ns, queue))
+    for i in range(args["num-cores"]):
+        w = Process(
+            target=_process_article_worker,
+            args=(extract_filenames[i], ns, queue),
+        )
         w.daemon = True
         w.start()
 
         workers.append(w)
 
-    # Parse articles from dump file and put into the queue.
-    regex_prefix = re.compile(r'({.*?})')
-    for event, elem in context:
-        if event != 'end' or not elem.tag.endswith('page'):
-            continue
+    articles_processed = 0
+    with tqdm(total=args["num-cores"], desc="Extracting articles") as pbar:
+        completed_tasks = 0
+        # Parse articles from dump file and put into the queue.
+        regex_prefix = re.compile(r"({.*?})")
 
-        # Skip the article which does not have namespace of 0.
-        prefix = regex_prefix.match(elem.tag).group(0)
-        if elem.find(f'./{prefix}ns').text != '0':
+        for event, elem in context:
+            if event != "end" or not elem.tag.endswith("page"):
+                continue
+
+            # Skip the article which does not have namespace of 0.
+            prefix = regex_prefix.match(elem.tag).group(0)
+            if elem.find(f"./{prefix}ns").text != "0":
+                root.clear()
+                continue
+
+            # Read raw wiki code of article content from the element.
+            article = elem.find(f"./{prefix}revision/{prefix}text").text
             root.clear()
-            continue
 
-        # Read raw wiki code of article content from the element.
-        article = elem.find(f'./{prefix}revision/{prefix}text').text
-        root.clear()
+            # Skip empty or redirection articles.
+            if article is None or article.lower().startswith("#redirect"):
+                continue
 
-        # Skip empty or redirection articles.
-        if article is None or article.lower().startswith('#redirect'):
-            continue
+            # Add to the queue.
+            articles_processed += 1
+            pbar.set_postfix(articles=articles_processed)
+            queue.put(article)
 
-        # Add to the queue.
-        queue.put(article)
+        # Finish the workers and wait for joining.
+        for _ in range(args["num-cores"]):
+            pbar.update(1)
+            queue.put(None)
 
-    # Finish the workers and wait for joining.
-    for _ in range(args['num-cores']):
-        queue.put(None)
     for w in workers:
         w.join()
 
     # Start splitting processes.
     _prepare_tokenizing_sentences(lang)
 
+    progress_queue = Queue()
     workers = []
-    split_filenames = random_filenames(temporary, args['num-cores'])
-    for i in range(args['num-cores']):
-        w = Process(target=_tokenize_sentences_worker,
-                    args=(extract_filenames[i],
-                          split_filenames[i],
-                          lang,
-                          args['min-length'],
-                          args['max-length'],
-                          args['split-sent'] == 'true'))
+    split_filenames = random_filenames(temporary, args["num-cores"])
+    for i in range(args["num-cores"]):
+        w = Process(
+            target=_tokenize_sentences_worker,
+            args=(
+                extract_filenames[i],
+                split_filenames[i],
+                lang,
+                args["min-length"],
+                args["max-length"],
+                progress_queue,
+                args["split-sent"] == "true",
+            ),
+        )
         w.daemon = True
         w.start()
 
         workers.append(w)
 
+    with tqdm(total=args["num-cores"], desc="Tokenizing articles") as pbar:
+        completed_tasks = 0
+        while completed_tasks < args["num-cores"]:
+            progress_queue.get()  # Wait for a task completion signal
+            pbar.update(1)
+            completed_tasks += 1
+
     # Wait for terminating the processes.
     for w in workers:
         w.join()
-    for i in range(args['num-cores']):
+    for i in range(args["num-cores"]):
         os.remove(extract_filenames[i])
 
     # Merge them into `output_file`.
-    with open(output_file, 'wb') as dst:
-        for i in range(args['num-cores']):
-            with open(split_filenames[i], 'rb') as src:
+    with open(output_file, "wb") as dst:
+        for i in range(args["num-cores"]):
+            with open(split_filenames[i], "rb") as src:
                 shutil.copyfileobj(src, dst)
 
     # Cleanup temporary files.
@@ -251,15 +289,15 @@ def _extract_wiki_corpus(input_file: str, output_file: str, temporary: str,
 
 
 __extension__ = {
-    'name': 'wikipedia dump extractor',
-    'version': '1.0',
-    'description': 'extract wiki dump file.',
-    'author': 'expanda',
-    'main': _extract_wiki_corpus,
-    'arguments': {
-        'num-cores': {'type': int, 'default': 1},
-        'min-length': {'type': int, 'default': 50},
-        'max-length': {'type': int, 'default': 1000},
-        'split-sent': {'type': str, 'default': 'true'},
-    }
+    "name": "wikipedia dump extractor",
+    "version": "1.0",
+    "description": "extract wiki dump file.",
+    "author": "expanda",
+    "main": _extract_wiki_corpus,
+    "arguments": {
+        "num-cores": {"type": int, "default": 1},
+        "min-length": {"type": int, "default": 50},
+        "max-length": {"type": int, "default": 1000},
+        "split-sent": {"type": str, "default": "true"},
+    },
 }
