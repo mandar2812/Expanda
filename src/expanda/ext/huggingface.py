@@ -1,5 +1,4 @@
 import os
-import shutil
 from typing import Dict, Any
 from tqdm import tqdm
 from datasets import load_dataset
@@ -23,7 +22,7 @@ def _process_huggingface_dataset(
     with open(output_file, "w", encoding="utf-8") as f:
         for example in tqdm(dataset, total=len(dataset), desc=f"Processing {dsname}"):
             text: str = example[args["text_column"]]
-            f.write(text.replace("\n\n", " ") + "\n")
+            f.write(text.replace("\n\n", " ") + "\n\n")
 
 
 __extension__ = {
