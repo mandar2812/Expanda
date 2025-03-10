@@ -1,4 +1,5 @@
 import os
+import json
 from typing import Dict, Any
 from tqdm import tqdm
 from datasets import load_dataset
@@ -19,10 +20,11 @@ def _process_huggingface_dataset(
     os.makedirs(temporary, exist_ok=True)
 
     # Process the dataset and save to output file
-    with open(output_file, "w", encoding="utf-8") as f:
+    with open(output_file, "a", encoding="utf-8") as f:
         for example in tqdm(dataset, total=len(dataset), desc=f"Processing {dsname}"):
             text: str = example[args["text_column"]]
-            f.write(text.replace("\n\n", " ") + "\n")
+            json.dump({"text": text.strip(' \n\t')}, f, ensure_ascii=False)
+            f.write("\n")
 
 
 __extension__ = {

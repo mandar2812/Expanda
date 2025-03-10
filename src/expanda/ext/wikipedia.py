@@ -2,6 +2,7 @@ import os
 import re
 import bz2
 import shutil
+import json
 import mwparserfromhell as mw
 import xml.etree.ElementTree as etree
 from typing import List, Dict, Any
@@ -91,14 +92,15 @@ def _clean_wiki_text(code: str, ns: List[str] = []) -> str:
 def _process_article_worker(
     output_file: str, ns: List[str], queue: Queue
 ):
-    with open(output_file, "w", encoding="utf-8") as fp:
+    with open(output_file, "a", encoding="utf-8") as fp:
         while True:
             code = queue.get()
             if code is None:
                 break
 
             # Write cleaned wiki articles into the output file.
-            fp.write(_clean_wiki_text(code, ns) + "\n\n")
+            json.dump({"text": _clean_wiki_text(code, ns)}, fp, ensure_ascii=False)
+            fp.write("\n")
 
 
 def _prepare_tokenizing_sentences(lang: str):
