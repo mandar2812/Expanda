@@ -22,13 +22,13 @@ def _process_huggingface_dataset(
     with open(output_file, "w", encoding="utf-8") as f:
         for example in tqdm(dataset, total=len(dataset), desc=f"Processing {dsname}"):
             text: str = example[args["text_column"]]
-            f.write(text.replace("\n\n", " ") + "\n\n")
+            f.write(text.replace("\n\n", " ") + "\n")
 
 
 __extension__ = {
     "name": "huggingface dataset processor",
     "version": "1.0",
-    "description": "process a dataset from Hugging Face Hub.",
+    "description": "Process a dataset downloaded from Hugging Face Hub.",
     "author": "mandar2812+GitHubCoPilot",
     "main": _process_huggingface_dataset,
     "arguments": {
