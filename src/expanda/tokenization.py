@@ -1,4 +1,5 @@
 import os
+import json
 import tqdm
 import argparse
 from typing import List
@@ -27,6 +28,32 @@ def _split_subset_from_file(input_file: str, subset_file: str,
             if src.tell() > subset_size:
                 break
 
+def jsonl_text_iterator(file_path, batch_size=1000):
+    """Yields batches of extracted text from a JSONL file.
+    
+    Args:
+        file_path (str): Path to the JSONL file.
+        batch_size (int): Number of lines to process per batch.
+    
+    Yields:
+        list: A batch of extracted text strings.
+    """
+    batch = []
+    with open(file_path, "r", encoding='utf-8') as f:
+        for line in f:
+            try:
+                data = json.loads(line)  # Parse JSON
+                if "text" in data:  # Extract text if available
+                    batch.append(data["text"])
+
+                if len(batch) >= batch_size:
+                    yield batch  # Yield a full batch
+                    batch = []  # Reset batch
+            except json.JSONDecodeError:
+                continue  # Skip malformed lines
+
+    if batch:
+        yield batch  # Yield remaining items if any
 
 def train_tokenizer(
         input_file: str,
@@ -38,7 +65,7 @@ def train_tokenizer(
         limit_alphabet: int = 6000,
         unk_token: str = '<unk>',
         control_tokens: List[str] = []):
-    r"""Train **WordPiece** tokenizer and save trained subword vocabulary.
+    r"""Train **BPE** tokenizer and save trained vocabulary.
 
     Note:
         Since tokenizers_ reads whole file data in training, this function
@@ -86,7 +113,11 @@ def train_tokenizer(
         show_progress=True,
         limit_alphabet=limit_alphabet,
         special_tokens=[unk_token] + control_tokens)
-    tokenizer.train([subset_file], trainer=trainer)
+
+    tokenizer.train_from_iterator(
+        jsonl_text_iterator(subset_file),
+        trainer=trainer,
+    )
 
     # Save trained subword vocabulary in `temporary` directory and rename to
     # `vocab_file`.
@@ -143,18 +174,21 @@ def tokenize_corpus(
         for line in tqdm.tqdm(src,
                               desc='[*] tokenize corpus',
                               total=total_lines):
-            buffer.append(line)
+            text: str = json.loads(line)['text']
+            buffer.append(text)
 
             # Tokenize buffered sentences and write to `output_file`.
             if len(buffer) > 10000:
                 for t in tokenizer.encode_batch(buffer):
-                    dst.write(' '.join(t.tokens) + '\n')
+                    json.dump({'tokens': ' '.join(t.tokens)}, dst, ensure_ascii=False)
+                    dst.write('\n')
                 buffer.clear()
 
         # Process the remained buffer.
         if buffer:
             for t in tokenizer.encode_batch(buffer):
-                dst.write(' '.join(t.tokens) + '\n')
+                json.dump({'tokens': ' '.join(t.tokens)}, dst, ensure_ascii=False)
+                dst.write('\n')
 
 
 def _main():

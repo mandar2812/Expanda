@@ -2,6 +2,7 @@ import os
 import re
 import bz2
 import shutil
+import json
 import mwparserfromhell as mw
 import xml.etree.ElementTree as etree
 from typing import List, Dict, Any
@@ -91,14 +92,15 @@ def _clean_wiki_text(code: str, ns: List[str] = []) -> str:
 def _process_article_worker(
     output_file: str, ns: List[str], queue: Queue
 ):
-    with open(output_file, "w", encoding="utf-8") as fp:
+    with open(output_file, "a", encoding="utf-8") as fp:
         while True:
             code = queue.get()
             if code is None:
                 break
 
             # Write cleaned wiki articles into the output file.
-            fp.write(_clean_wiki_text(code, ns) + "\n\n")
+            json.dump({"text": _clean_wiki_text(code, ns)}, fp, ensure_ascii=False)
+            fp.write("\n")
 
 
 def _prepare_tokenizing_sentences(lang: str):
@@ -240,51 +242,14 @@ def _extract_wiki_corpus(
     for w in workers:
         w.join()
 
-    # Start splitting processes.
-    _prepare_tokenizing_sentences(lang)
-
-    progress_queue = Queue()
-    workers = []
-    split_filenames = random_filenames(temporary, args["num-cores"])
-    for i in range(args["num-cores"]):
-        w = Process(
-            target=_tokenize_sentences_worker,
-            args=(
-                extract_filenames[i],
-                split_filenames[i],
-                lang,
-                args["min-length"],
-                args["max-length"],
-                progress_queue,
-                args["split-sent"] == "true",
-            ),
-        )
-        w.daemon = True
-        w.start()
-
-        workers.append(w)
-
-    with tqdm(total=args["num-cores"], desc="Tokenizing articles") as pbar:
-        completed_tasks = 0
-        while completed_tasks < args["num-cores"]:
-            progress_queue.get()  # Wait for a task completion signal
-            pbar.update(1)
-            completed_tasks += 1
-
-    # Wait for terminating the processes.
-    for w in workers:
-        w.join()
-    for i in range(args["num-cores"]):
-        os.remove(extract_filenames[i])
-
     # Merge them into `output_file`.
     with open(output_file, "wb") as dst:
         for i in range(args["num-cores"]):
-            with open(split_filenames[i], "rb") as src:
+            with open(extract_filenames[i], "rb") as src:
                 shutil.copyfileobj(src, dst)
 
     # Cleanup temporary files.
-    for name in split_filenames:
+    for name in extract_filenames:
         os.remove(name)
 
 
