@@ -108,6 +108,9 @@ def _build_corpus(workspace: str, config_file: str):
     merges = os.path.join(
         workspace, config["build"].get("output-merges", "build/merges.txt")
     )
+    tokenizer_file = os.path.join(
+        args.workspace, config["build"].get("output-tokenizer", "build/tokenizer.json")
+    )
     split_ratio = config["build"].getfloat("split-ratio", 0.1)
 
     train_corpus = os.path.join(
@@ -183,6 +186,7 @@ def _build_corpus(workspace: str, config_file: str):
             raw_corpus,
             vocab,
             merges,
+            tokenizer_file,
             temporary,
             subset_size,
             vocab_size,
@@ -201,8 +205,7 @@ def _build_corpus(workspace: str, config_file: str):
     tokenize_corpus(
         raw_corpus,
         tokenize_filename,
-        vocab,
-        merges,
+        tokenizer_file,
         unk_token=unk_token,
         control_tokens=control_tokens,
     )
