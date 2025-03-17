@@ -108,6 +108,8 @@ def train_tokenizer(
     # Set pre-tokenizer to byte-level (like GPT)
     tokenizer.pre_tokenizer = ByteLevel()
 
+    tokenizer.decoder = decoders.ByteLevel()
+
     num_sp_tks = tokenizer.add_special_tokens([unk_token] + control_tokens)
     print(f"[*] added {num_sp_tks} special tokens to the vocabulary.")
 
