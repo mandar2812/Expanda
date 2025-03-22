@@ -100,6 +100,7 @@ def _build_corpus(workspace: str, config_file: str):
     ]
     reuse_vocab = config["build"].get("input-vocab", None)
     reuse_merges = config["build"].get("input-merges", None)
+    reuse_tokenizer = config["build"].get("input-tokenizer", None)
 
     temporary = os.path.join(workspace, config["build"].get("temporary-path", "tmp"))
     vocab = os.path.join(
@@ -180,7 +181,19 @@ def _build_corpus(workspace: str, config_file: str):
     # Train subword tokenizer and tokenize the corpus
     print("[*] complete preparing corpus. start training tokenizer...")
 
-    if reuse_vocab is None or reuse_merges is None:
+    should_train_tokenizer = True
+    if reuse_tokenizer:
+        print(f"[*] use the given tokenizer file [{reuse_tokenizer}].")
+        shutil.copyfile(reuse_tokenizer, tokenizer_file)
+        should_train_tokenizer = False
+    if reuse_vocab and reuse_merges:
+        # If re-using pretrained vocabulary file, skip training tokenizer
+        print(f"[*] use the given vocabulary file [{reuse_vocab}] and merges [{reuse_merges}].")
+        shutil.copyfile(reuse_vocab, vocab)
+        shutil.copyfile(reuse_merges, merges)
+        should_train_tokenizer = False
+
+    if should_train_tokenizer:
         print("[*] train tokenizer.")
         train_tokenizer(
             raw_corpus,
@@ -194,11 +207,6 @@ def _build_corpus(workspace: str, config_file: str):
             unk_token,
             control_tokens,
         )
-    else:
-        # If re-using pretrained vocabulary file, skip training tokenizer
-        print(f"[*] use the given vocabulary file [{reuse_vocab}] and merges [{reuse_merges}].")
-        shutil.copyfile(reuse_vocab, vocab)
-        shutil.copyfile(reuse_merges, merges)
 
     print("[*] create tokenized corpus.")
     tokenize_filename = random_filename(temporary)
