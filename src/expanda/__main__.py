@@ -7,6 +7,7 @@ import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from configparser import ConfigParser
+from datasets import load_dataset  # Add this import
 from .extension import Extension
 from .shuffling import shuffle
 from .tokenization import train_tokenizer, tokenize_corpus
@@ -317,6 +318,7 @@ def _combine_workspaces(output_workspace: str, input_workspaces: List[str]):
 
     # Process each workspace
     all_input_files = []
+    build_configs = []
     for workspace in input_workspaces:
         config = ConfigParser()
         config_path = os.path.join(workspace, "expanda.cfg")
@@ -334,7 +336,8 @@ def _combine_workspaces(output_workspace: str, input_workspaces: List[str]):
         # Process input files
         input_files = config["build"].get("input-files", "").splitlines()
         input_files = [f for f in input_files if f.strip()]
-
+        config["build"].pop("input-files", None)
+        build_configs.append(config["build"])
         for input_file in input_files:
             match = re.match(r"--(.*?)\s+(.*)", input_file.strip())
             if match:
@@ -357,6 +360,11 @@ def _combine_workspaces(output_workspace: str, input_workspaces: List[str]):
         merged_config.add_section("build")
 
     merged_config.set("build", "input-files", "\n\t" + "\n\t".join(all_input_files))
+    # Add other build options
+    for build_config in build_configs:
+        for key, value in build_config.items():
+            if not merged_config.has_option("build", key):
+                merged_config.set("build", key, value)
 
     # Copy common build outputs
     common_outputs = [
@@ -381,6 +389,36 @@ def _combine_workspaces(output_workspace: str, input_workspaces: List[str]):
 
     print(f"[*] Combined {len(input_workspaces)} workspaces into {output_workspace}")
 
+
+def _download_hf_dataset(workspace: str, dataset_name: str):
+    # Create src and build directories if not exists
+    src_dir = os.path.join(workspace, "src")
+    build_dir = os.path.join(workspace, "build")
+    os.makedirs(src_dir, exist_ok=True)
+    os.makedirs(build_dir, exist_ok=True)
+
+    # Download the dataset
+    print(f"Downloading dataset {dataset_name} to {src_dir}")
+    dataset = load_dataset(dataset_name, cache_dir=src_dir)
+
+    # Generate expanda.cfg file
+    config = ConfigParser()
+    config["expanda.ext.huggingface"] = {
+        "cache_dir": src_dir,
+        "dataset_name": dataset_name,
+    }
+    config["tokenization"] = {
+        "unk-token": "<unk>",
+        "control-tokens": "<s>\n</s>\n<pad>",
+    }
+    config["build"] = {
+        "input-files": f"--expanda.ext.huggingface     src/{dataset_name}",
+    }
+
+    with open(os.path.join(workspace, "expanda.cfg"), "w") as configfile:
+        config.write(configfile)
+
+    print(f"Generated expanda.cfg in {workspace}")
 
 
 parser = argparse.ArgumentParser(
@@ -410,11 +448,11 @@ build_parser.add_argument(
 )
 
 # command line: expanda download [workspace] [--limit LIMIT]
-download_parser = subparsers.add_parser(
+download_wiki_parser = subparsers.add_parser(
     "download", help="download latest Wikipedia dumps and generate expanda.cfg"
 )
-download_parser.add_argument("workspace", help="workspace directory")
-download_parser.add_argument(
+download_wiki_parser.add_argument("workspace", help="workspace directory")
+download_wiki_parser.add_argument(
     "--limit", type=int, default=5, help="limit the number of files to download"
 )
 
@@ -427,6 +465,13 @@ combine_parser.add_argument(
     "input_workspaces", nargs="+", help="input workspace directories to combine"
 )
 
+# command line: expanda download-hf [workspace] [dataset_name]
+download_hf_parser = subparsers.add_parser(
+    "download-hf", help="download a Hugging Face dataset and generate expanda.cfg"
+)
+download_hf_parser.add_argument("workspace", help="workspace directory")
+download_hf_parser.add_argument("dataset_name", help="name of the Hugging Face dataset")
+
 args = parser.parse_args()
 if args.command == "list":
     _show_required_extension_list(args.config)
@@ -434,7 +479,9 @@ elif args.command == "show":
     _show_extension_details(args.extension)
 elif args.command == "build":
     _build_corpus(args.workspace, args.config)
-elif args.command == "download":
+elif args.command == "download-wiki":
     _download_latest_wikipedia_dumps(args.workspace, args.limit)
 elif args.command == "combine":
     _combine_workspaces(args.output_workspace, args.input_workspaces)
+elif args.command == "download-hf":
+    _download_hf_dataset(args.workspace, args.dataset_name)
