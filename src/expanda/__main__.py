@@ -359,6 +359,8 @@ def _combine_workspaces(output_workspace: str, input_workspaces: List[str]):
                     all_input_files.append(
                         f"--{ext}     {os.path.relpath(new_src_path, output_workspace)}"
                     )
+                else:
+                    print(f"Warning: {abs_src_path} does not exist. Skipping.")
 
     # Set build section in merged config
     if not merged_config.has_section("build"):
