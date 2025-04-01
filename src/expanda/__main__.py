@@ -125,14 +125,6 @@ def _build_corpus(workspace: str, config_file: str):
         workspace, config["build"].get("output-raw-corpus", "build/corpus.raw.txt")
     )
 
-    subset_size = config["tokenization"].getint("subset-size", fallback=1000000000)
-    vocab_size = config["tokenization"].getint("vocab-size", fallback=8000)
-    limit_alphabet = config["tokenization"].getint("limit-alphabet", fallback=1000)
-    unk_token = config["tokenization"].get("unk-token", "<unk>")
-
-    control_tokens = config["tokenization"].get("control-tokens", "")
-    control_tokens = [token.strip() for token in control_tokens.splitlines() if token]
-
     # Create directories if not exists
     def create_dir(path):
         try:
@@ -179,7 +171,20 @@ def _build_corpus(workspace: str, config_file: str):
         os.remove(integrate_filename)
     else:
         shutil.move(integrate_filename, raw_corpus)
-    # Train subword tokenizer and tokenize the corpus
+
+    if not config.has_section("tokenization"):
+        print("[*] no tokenization section in the config file.")
+        print("[*] finished building corpus.")
+        return
+
+    subset_size = config["tokenization"].getint("subset-size", fallback=1000000000)
+    vocab_size = config["tokenization"].getint("vocab-size", fallback=8000)
+    limit_alphabet = config["tokenization"].getint("limit-alphabet", fallback=1000)
+    unk_token = config["tokenization"].get("unk-token", "<unk>")
+
+    control_tokens = config["tokenization"].get("control-tokens", "")
+    control_tokens = [token.strip() for token in control_tokens.splitlines() if token]
+    # Train tokenizer and tokenize the corpus
     print("[*] complete preparing corpus. start training tokenizer...")
 
     should_train_tokenizer = True

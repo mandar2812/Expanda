@@ -99,8 +99,10 @@ def _process_article_worker(
                 break
 
             # Write cleaned wiki articles into the output file.
-            json.dump({"text": _clean_wiki_text(code, ns)}, fp, ensure_ascii=False)
-            fp.write("\n")
+            cleaned_article_text = _clean_wiki_text(code, ns)
+            if cleaned_article_text:
+                json.dump({"text": _clean_wiki_text(code, ns)}, fp, ensure_ascii=False)
+                fp.write("\n")
 
 
 def _prepare_tokenizing_sentences(lang: str):
