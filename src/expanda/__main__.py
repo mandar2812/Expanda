@@ -47,18 +47,18 @@ def _show_required_extension_list(config_file: str):
 
     # Parse `input-files` option to get required extension list.
     input_files = config["build"].get("input-files", fallback="")
-    exts = set(
-        re.match(r"--(.*?)\s", line).group(0)
+    exts = set([
+        re.match(r"--(.*?)\s+(.*)", line.strip()).groups()[0]
         for line in input_files.splitlines(False)
         if line
-    )
+    ])
 
     # Show the extension list tidily.
-    print("{:25s}{:10s}".format("Extension", "Version"))
-    print("=" * 35)
+    print("{:60s}{:10s}".format("Extension", "Version"))
+    print("=" * 70)
     for ext in exts:
         version = Extension(ext).version
-        print(f"{ext[:25]:25s}{version[:10]:10s}")
+        print(f"{ext[:60]:60s}{version[:10]:10s}")
 
 
 def _balancing_corpora(input_files: List[str], corpus_names: List[str], temporary: str):
