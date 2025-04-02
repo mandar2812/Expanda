@@ -1,17 +1,19 @@
-import re
-import os
-import math
-import shutil
 import argparse
+import math
+import os
+import re
+import shutil
+from configparser import ConfigParser
+from typing import List
+
 import requests
 from bs4 import BeautifulSoup
+from datasets import load_dataset
 from dotenv import load_dotenv
-from configparser import ConfigParser
-from datasets import load_dataset  # Add this import
+
 from .extension import Extension
 from .shuffling import shuffle
-from .tokenization import train_tokenizer, tokenize_corpus
-from typing import List
+from .tokenization import tokenize_corpus, train_tokenizer
 from .utils import random_filename, random_filenames
 
 load_dotenv(verbose=True)
@@ -194,7 +196,9 @@ def _build_corpus(workspace: str, config_file: str):
         should_train_tokenizer = False
     if reuse_vocab and reuse_merges:
         # If re-using pretrained vocabulary file, skip training tokenizer
-        print(f"[*] use the given vocabulary file [{reuse_vocab}] and merges [{reuse_merges}].")
+        print(
+            f"[*] use the given vocabulary file [{reuse_vocab}] and merges [{reuse_merges}]."
+        )
         shutil.copyfile(reuse_vocab, vocab)
         shutil.copyfile(reuse_merges, merges)
         should_train_tokenizer = False
@@ -406,23 +410,34 @@ def _download_hf_dataset(workspace: str, dataset_name: str):
 
     # Download the dataset
     print(f"Downloading dataset {dataset_name} to {src_dir}")
-    dataset = load_dataset(dataset_name, cache_dir=src_dir)
+    load_dataset(dataset_name, cache_dir=src_dir)
+
+    # List the directories inside src_dir.
+    data_dir = [
+        p.name
+        for p in os.scandir(src_dir)
+        if p.is_dir() and dataset_name.split("/")[1].lower() in p.name
+    ][0]
+
+    print(f"Found downloaded dataset in {data_dir}:")
 
     # Generate expanda.cfg file
     config = ConfigParser()
+
     config["expanda.ext.huggingface"] = {
         "cache_dir": src_dir,
         "dataset_name": dataset_name,
     }
-    config["tokenization"] = {
-        "unk-token": "<unk>",
-        "control-tokens": "<s>\n</s>\n<pad>",
-    }
+
+    config["tokenization"] = {}
+
     config["build"] = {
-        "input-files": f"--expanda.ext.huggingface     src/{dataset_name}",
+        "input-files": f"--expanda.ext.huggingface     src/{data_dir}",
     }
 
-    with open(os.path.join(workspace, "expanda.cfg"), "w") as configfile:
+    with open(
+        os.path.join(workspace, "expanda.cfg"), "w", encoding="utf-8"
+    ) as configfile:
         config.write(configfile)
 
     print(f"Generated expanda.cfg in {workspace}")
