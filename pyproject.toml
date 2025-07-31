@@ -1,3 +1,50 @@
 [build-system]
 requires = ["setuptools", "wheel", "Cython"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "Expanda"
+version = "1.3.1"
+description = "Integrated Corpus-Building Environment"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+authors = [{name = "Mandar Chandorkar", email = "mandar2812@gmail.com"}]
+keywords = ["expanda", "corpus", "dataset", "nlp"]
+classifiers = [
+    'Environment :: Console',
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+requires-python = ">=3.10.0"
+
+dependencies = [
+    "PyYAML==6.0.2",
+    "nltk",
+    "ijson",
+    "tqdm",
+    "mwparserfromhell",
+    "tokenizers",
+    "datasets",
+    "kss",
+    "huggingface_hub",
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+dev = [
+    "sphinx",
+    "romnnn-sphinx-press-theme>=0.5.6",
+]
+
+[project.urls]
+Repository = "https://github.com/mandar2812/Expanda"
+
+[project.scripts]
+expanda = "expanda:_main"
+expanda-shuffling = "expanda.shuffling:_main"
+expanda-tokenization = "expanda.tokenization:_main"

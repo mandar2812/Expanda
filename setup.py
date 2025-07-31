@@ -4,15 +4,15 @@ setup(
     name='Expanda',
     version='1.3.1',
 
-    author='Jungwoo Park',
-    author_email='affjljoo3581@gmail.com',
+    author='Mandar Chandorkar',
+    author_email='mandar2812@gmail.com',
 
     description='Integrated Corpus-Building Environment',
     long_description=open('README.md', 'r', encoding='utf-8').read(),
     long_description_content_type='text/markdown',
 
     keywords=['expanda', 'corpus', 'dataset', 'nlp'],
-    url='https://github.com/affjljoo3581/Expanda',
+    url='https://github.com/mandar2812/Expanda',
     license='Apache-2.0',
 
     package_dir={'': 'src'},
@@ -30,6 +30,13 @@ setup(
         'huggingface_hub',
         'python-dotenv'
     ],
+
+    extras_require={
+        'dev': [
+            'sphinx',
+            'romnnn-sphinx-press-theme>=0.5.6'
+        ]
+    },
 
     entry_points={
         'console_scripts': [

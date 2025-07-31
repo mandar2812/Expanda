@@ -18,8 +18,8 @@ sys.path.insert(0, os.path.abspath('../../src'))
 # -- Project information -----------------------------------------------------
 
 project = 'Expanda'
-copyright = '2020, affjljoo3581'
-author = 'affjljoo3581'
+copyright = '2025, mandar2812'
+author = 'mandar2812'
 
 
 # -- General configuration ---------------------------------------------------
@@ -29,7 +29,8 @@ author = 'affjljoo3581'
 # ones.
 extensions = [
     'sphinx.ext.napoleon',
-    'sphinx.ext.autosummary'
+    'sphinx.ext.autosummary',
+    'sphinx.ext.autodoc'
 ]
 
 autosummary_generate = True
